@@ -1,4 +1,5 @@
 # 华芯沃 (HXinWatch) Home Assistant 集成
+## 本集成由AI参与生成
 
 这是一个 Home Assistant 自定义集成，用于连接和控制华芯沃 (HXinWatch) 智能手表设备，提供设备状态监控和远程控制功能。
 
@@ -30,7 +31,7 @@
 2.  在 Home Assistant 中，导航到 **HACS** -> **集成 (Integrations)**。
 3.  点击右下角的 **Explore & Download Repositories** (或 **+** 号)，然后选择 **Custom repositories**。
 4.  在 `Add custom repository` 对话框中：
-    * **Repository**: 填写您的 Git 仓库地址（例如 `https://github.com/your_username/your_repository_name`）。
+    * **Repository**: 填写仓库地址 `https://github.com/hlhk2017/hxinwatch-homeassistant`。
     * **Category**: 选择 `Integration`。
     * 点击 `ADD`。
 5.  在 HACS 中搜索 `华芯沃` 或 `HXinWatch`，然后点击下载。
@@ -49,7 +50,8 @@
     * **语言 (可选)**: API 请求的语言，默认为 `zh-Hans` (简体中文)。
     * **刷新时间 (可选)**: 数据更新的间隔秒数（范围 1-60），默认为 30 秒。
 5.  点击 **提交 (Submit)** 完成配置。
-
+6. token获取方式：
+   通过Reqable或者其它工具抓包，在这个连接中可以看到上述信息`http://yg.hxinwatch.com/sdkapi/api/device/config/contact`
 ## 🔧 服务
 
 集成提供了多个服务，您可以在自动化、脚本或开发者工具中调用它们。
