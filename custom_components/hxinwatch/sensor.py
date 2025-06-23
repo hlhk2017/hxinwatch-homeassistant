@@ -1,9 +1,8 @@
 # hxinwatch/sensor.py
-"""支持HXinWatch设备的传感器平台。"""
-from __future__ import annotations
+from __future__ import annotations # <--- 确保这一行是文件的绝对第一行！
 
 import logging
-from typing import Any
+from typing import Any, List
 
 from homeassistant.components.sensor import (
     SensorDeviceClass,
@@ -33,6 +32,46 @@ from .const import (
 
 _LOGGER = logging.getLogger(__name__)
 
+# 星期映射辅助函数 (放在所有常规导入之后，在其他代码之前)
+# Home Assistant 星期缩写到 API 7位二进制字符串索引的映射 (周一为0，周日为6)
+HA_TO_API_WEEKDAYS_MAP = {
+    'mon': 0, 'tue': 1, 'wed': 2, 'thu': 3, 'fri': 4, 'sat': 5, 'sun': 6
+}
+# API 7位二进制字符串索引到中文星期名称的映射 (周一为0，周日为6)
+API_WEEKDAYS_ZH = [
+    "周一", "周二", "周三", "周四", "周五", "周六", "周日"
+]
+
+def _convert_weekdays_to_binary(weekdays: List[str]) -> str:
+    """将 Home Assistant 的星期列表（如 ['mon', 'wed']）转换为 7 位二进制字符串（Mon-Sun 顺序）。"""
+    binary = ['0'] * 7
+    for day in weekdays:
+        if day in HA_TO_API_WEEKDAYS_MAP:
+            binary[HA_TO_API_WEEKDAYS_MAP[day]] = '1'
+    return "".join(binary)
+
+def _convert_binary_to_weekdays_string(binary_week: str) -> str:
+    """将 7 位二进制星期字符串（Mon-Sun 顺序，如 '0110001'）转换为人类可读的星期字符串。"""
+    if not isinstance(binary_week, str) or len(binary_week) != 7:
+        return "未知"
+    
+    selected_days = []
+    for i, bit in enumerate(binary_week):
+        if bit == '1':
+            selected_days.append(API_WEEKDAYS_ZH[i])
+    
+    if not selected_days:
+        return "不重复"
+    if len(selected_days) == 7:
+        return "每天"
+    if selected_days == ["周一", "周二", "周三", "周四", "周五"]:
+        return "工作日"
+    if selected_days == ["周六", "周日"]:
+        return "周末"
+    
+    return ", ".join(selected_days)
+
+
 # 定义传感器类型和描述
 SENSOR_TYPES: tuple[SensorEntityDescription, ...] = (
     SensorEntityDescription(
@@ -52,7 +91,7 @@ SENSOR_TYPES: tuple[SensorEntityDescription, ...] = (
     SensorEntityDescription(
         key=SENSOR_TYPE_OXYGEN,
         name="血氧饱和度",
-        icon="mdi:water",
+        icon="mdi:water-percent",
         native_unit_of_measurement="%",
         state_class=SensorStateClass.MEASUREMENT,
     ),
@@ -121,8 +160,8 @@ class HXinWatchSensor(CoordinatorEntity, SensorEntity):
         self._attr_unique_id = f"{device_id}_{description.key}"
         self._attr_device_info = {
             "identifiers": {(DOMAIN, device_id)},
-            "name": "华芯沃设备", # 修改这里
-            "manufacturer": "华芯沃", # 修改这里
+            "name": "华芯沃设备",
+            "manufacturer": "华芯沃",
             "model": "Smart Watch",
         }
 
@@ -180,7 +219,14 @@ class HXinWatchSensor(CoordinatorEntity, SensorEntity):
             return {"contacts": contacts}
 
         if self.entity_description.key == SENSOR_TYPE_ALARM_COUNT:
-            alarms = data.get("alarms", [])
-            return {"alarms": alarms}
+            alarms_raw = data.get("alarms", [])
+            # 复制并转换闹钟列表中的 week 字段
+            alarms_display = []
+            for alarm in alarms_raw:
+                alarm_copy = alarm.copy() # 复制字典以避免修改原始协调器数据
+                if "week" in alarm_copy:
+                    alarm_copy["week_readable"] = _convert_binary_to_weekdays_string(alarm_copy["week"])
+                alarms_display.append(alarm_copy)
+            return {"alarms": alarms_display}
             
         return None
