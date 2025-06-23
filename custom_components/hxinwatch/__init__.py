@@ -1,3 +1,4 @@
+# hxinwatch/__init__.py
 """支持HXinWatch设备的集成。"""
 from __future__ import annotations
 
@@ -23,23 +24,29 @@ PLATFORMS: list[Platform] = [
     Platform.DEVICE_TRACKER,
 ]
 
-
 async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     """设置HXinWatch设备的配置入口。"""
     _LOGGER.debug("Async setup entry started for HXinWatch (Entry ID: %s).", entry.entry_id)
-    token = entry.data["token"]
+    
     imei = entry.data["imei"]
+    appid = entry.data["appid"] # 从配置中获取 appid
     language = entry.data.get("language", "zh-Hans")
     
-    # 获取用户配置的刷新间隔，它现在应该是一个整数
-    scan_interval_seconds = entry.data.get("scan_interval", DEFAULT_SCAN_INTERVAL) # 它现在总是整数
+    scan_interval_seconds = entry.data.get("scan_interval", DEFAULT_SCAN_INTERVAL)
     
     _LOGGER.debug("刷新间隔设置为: %s 秒", scan_interval_seconds)
     
     try:
         session = async_get_clientsession(hass)
-        api = HXinWatchAPI(token, imei, language, session)
+        # HXinWatchAPI 实例化时传入 appid
+        api = HXinWatchAPI(
+            imei=imei,
+            appid=appid,
+            language=language,
+            session=session,
+        )
         _LOGGER.debug("HXinWatchAPI 实例已创建。")
+
     except Exception as e:
         _LOGGER.error("创建 HXinWatchAPI 实例失败: %s", e)
         return False
@@ -47,6 +54,8 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     async def async_update_data():
         """获取最新数据的函数。"""
         try:
+            # 协调器在每次更新时，内部会先调用 async_refresh_token_if_needed
+            # 该方法会自动使用 appid 获取或刷新 token
             _LOGGER.debug("开始从HXinWatch API获取设备状态...")
             status = await api.async_get_device_status()
             _LOGGER.debug("从HXinWatch API获取到设备状态: %s", status)
@@ -83,7 +92,7 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
             _LOGGER,
             name=f"{DOMAIN}_{entry.data['imei']}",
             update_method=async_update_data,
-            update_interval=timedelta(seconds=scan_interval_seconds), # 使用整数秒数
+            update_interval=timedelta(seconds=scan_interval_seconds),
         )
         _LOGGER.debug("DataUpdateCoordinator 实例已创建。")
     except Exception as e:
@@ -92,6 +101,7 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     
     _LOGGER.debug("首次加载HXinWatch设备数据...")
     try:
+        # 首次刷新会触发 Token 获取和设备状态获取
         await coordinator.async_config_entry_first_refresh()
         _LOGGER.debug("HXinWatch协调器首次刷新完成，数据: %s", coordinator.data)
     except Exception as e:
@@ -126,7 +136,6 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
         _LOGGER.debug("通知平台加载任务已创建。")
     except Exception as e:
         _LOGGER.error("通知平台加载失败: %s", e)
-        # 通知平台加载失败不应该阻止主集成加载，但仍需记录
 
     _LOGGER.debug("设置 HXinWatch 服务。")
     try:
