@@ -1,3 +1,4 @@
+# hxinwatch/notify.py
 """支持HXinWatch设备的通知平台。"""
 from __future__ import annotations
 
@@ -10,7 +11,7 @@ from homeassistant.components.notify import (
 )
 from homeassistant.core import HomeAssistant
 from homeassistant.helpers.typing import ConfigType, DiscoveryInfoType
-from homeassistant.helpers.aiohttp_client import async_get_clientsession # 确保这一行已导入
+from homeassistant.helpers.aiohttp_client import async_get_clientsession
 
 from .const import DOMAIN
 from .api import HXinWatchAPI
@@ -34,13 +35,20 @@ async def async_get_service(
         _LOGGER.error(f"找不到ID为 {entry_id} 的配置入口，无法设置通知服务。")
         return None
 
-    token = entry.data["token"]
+    # 获取配置中的参数
     imei = entry.data["imei"]
+    appid = entry.data["appid"] # 新增 appid 参数
     language = entry.data.get("language", "zh-Hans")
-    # 修正了这里：直接使用已导入的 async_get_clientsession 函数
+
     session = async_get_clientsession(hass) 
     
-    api = HXinWatchAPI(token, imei, language, session)
+    # HXinWatchAPI 实例化时传入 appid
+    api = HXinWatchAPI(
+        imei=imei,
+        appid=appid,
+        language=language,
+        session=session,
+    )
     
     return HXinWatchNotificationService(api)
 
