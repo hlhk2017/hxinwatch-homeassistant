@@ -11,38 +11,60 @@ from homeassistant import config_entries
 from homeassistant.core import HomeAssistant
 from homeassistant.data_entry_flow import FlowResult
 from homeassistant.exceptions import HomeAssistantError
-# 移除了 homeassistant.helpers.selector 的导入，因为它不再需要
+from homeassistant.helpers.aiohttp_client import async_get_clientsession
 
 from .const import DOMAIN, DEFAULT_SCAN_INTERVAL
+from .api import HXinWatchAPI
 
 _LOGGER = logging.getLogger(__name__)
 
 # 定义配置表单的schema
 STEP_USER_DATA_SCHEMA = vol.Schema(
     {
-        vol.Required("token"): str,
-        vol.Required("imei"): str,
+        vol.Required("imei"): str,  # IMEI 是必填项
+        vol.Required("appid"): str, # AppID 是必填项，用于获取Token
         vol.Optional("language", default="zh-Hans"): str,
-        # 新增：刷新时间设置，使用数字输入框和范围验证
         vol.Optional(
             "scan_interval",
-            default=30, # UI 中的默认值
-        ): vol.All(vol.Coerce(int), vol.Range(min=1, max=60)), # 直接验证整数范围
+            default=30,
+        ): vol.All(vol.Coerce(int), vol.Range(min=1, max=60)),
     }
 )
 
-
 async def validate_input(hass: HomeAssistant, data: dict[str, Any]) -> dict[str, Any]:
     """验证用户输入的数据。"""
-    # 在这里验证用户输入，例如尝试使用提供的token和imei连接到API
-    # 如果验证失败，抛出相应的异常
+    imei = data["imei"]
+    appid = data["appid"]
+    language = data.get("language", "zh-Hans")
+
+    session = async_get_clientsession(hass)
+    # HXinWatchAPI 现在需要 appid 作为初始化参数
+    api = HXinWatchAPI(
+        imei=imei,
+        appid=appid,
+        language=language,
+        session=session,
+    )
+
+    try:
+        # 首先尝试通过 AppID 获取 Token (此步骤不再需要IMEI)
+        await api.async_get_token_by_appid()
+        _LOGGER.debug("通过 AppID 获取 Token 成功。")
+        
+        # 然后尝试使用获取到的 Token 和用户提供的 IMEI 获取设备状态进行验证
+        await api.async_get_device_status()
+        _LOGGER.debug("使用新获取的Token和IMEI获取设备状态成功，输入验证通过。")
+
+    except Exception as e:
+        _LOGGER.warning("HXinWatch输入验证失败: %s", e)
+        if isinstance(e, HomeAssistantError):
+            raise e
+        # 尝试区分认证错误和连接错误
+        if "401" in str(e) or "Unauthorized" in str(e) or "认证失败" in str(e) or "获取Token失败" in str(e):
+             raise InvalidAuth("认证信息（AppID或IMEI）无效。") from e
+        raise CannotConnect(f"无法连接或获取设备数据: {e}") from e
     
-    # 示例实现，实际中应替换为真实的API调用
-    if len(data["token"]) < 32:
-        raise InvalidAuth
-    
-    # 如果验证成功，返回包含设备信息的字典
-    return {"title": "HXinWatch Device"}
+    return {"title": f"HXinWatch Device ({imei})"}
 
 
 class ConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
